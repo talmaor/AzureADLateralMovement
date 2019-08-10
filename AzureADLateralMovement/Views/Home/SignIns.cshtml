@@ -1,0 +1,32 @@
+﻿@* Copyright (c) Microsoft. All rights reserved. Licensed under the MIT license. See LICENSE.txt in the project root for license information.*@
+@model List<AzureActiveDirectoryApplication.Models.InteractiveLogon>
+
+@{
+    ViewBag.Title = "InteractiveLogOns";
+}
+
+<h2>Inbox</h2>
+
+<table class="table">
+    <tr>
+        <th>
+            UserId
+        </th>
+        <th>
+            DeviceId
+        </th>
+    </tr>
+
+    @foreach (var item in Model)
+    {
+        <tr>
+            <td>
+                @Html.DisplayFor(modelItem => item.UserId)
+            </td>
+            <td>
+                @Html.DisplayFor(modelItem => item.DeviceId)
+            </td>
+        </tr>
+    }
+
+</table>
