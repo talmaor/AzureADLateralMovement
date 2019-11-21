@@ -2,6 +2,7 @@
 using System.Configuration;
 using System.IdentityModel.Claims;
 using System.IdentityModel.Tokens;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.WebPages;
@@ -19,24 +20,28 @@ using Owin;
 [assembly: OwinStartup(typeof(Startup))]
 namespace AzureActiveDirectoryApplication
 {
-    public class Startup
+    public class 
+        Startup
     {
-        public static string AppId = ConfigurationManager.AppSettings["ida:AppId"];
-        public static string AppPassword = ConfigurationManager.AppSettings["ida:AppPassword"];
+        public static readonly string AppId = ConfigurationManager.AppSettings["ida:AppId"];
+        public static readonly string AppPassword = ConfigurationManager.AppSettings["ida:AppPassword"];
         public static string RedirectUri = ConfigurationManager.AppSettings["ida:RedirectUri"];
-        public static string[] Scopes = ConfigurationManager.AppSettings["ida:AppScopes"]
+        public static readonly string[] Scopes = ConfigurationManager.AppSettings["ida:AppScopes"]
           .Replace(' ', ',').Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-        public static string OutputFolderLocation = ConfigurationManager.AppSettings["ida:OutputFolderLocation"];
+        public static readonly string OutputFolderLocation = ConfigurationManager.AppSettings["ida:OutputFolderLocation"];
 
-        public static bool IsCosmosDbGraphEnabled =
+        public static readonly bool IsCosmosDbGraphEnabled =
             ConfigurationManager.AppSettings["ida:IsCosmosDbGraphEnabled"].AsBool();
 
         public void Configuration(IAppBuilder app)
         {
+            if (HttpContext.Current.IsDebuggingEnabled)
+            {
+                RedirectUri = "http://localhost:44302/";
+            }
+
             app.SetDefaultSignInAsAuthenticationType(CookieAuthenticationDefaults.AuthenticationType);
-
             app.UseCookieAuthentication(new CookieAuthenticationOptions());
-
             app.UseOpenIdConnectAuthentication(
               new OpenIdConnectAuthenticationOptions
               {
@@ -87,19 +92,54 @@ namespace AzureActiveDirectoryApplication
             return Task.FromResult(0);
         }
 
+        public async Task<string> GetAccessToken(SessionTokenCache tokenCache)
+        {
+            string accessToken = null;
+
+            // Load the app config from web.config
+            var appId = ConfigurationManager.AppSettings["ida:AppId"];
+            var appPassword = ConfigurationManager.AppSettings["ida:AppPassword"];
+            var redirectUri = ConfigurationManager.AppSettings["ida:RedirectUri"];
+            var scopes = ConfigurationManager.AppSettings["ida:AppScopes"]
+                .Replace(' ', ',').Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+            var confidentialClientApplication = new ConfidentialClientApplication(
+                appId,
+                redirectUri,
+                new ClientCredential(appPassword),
+                tokenCache.GetMsalCacheInstance(),
+                null);
+
+            // Call AcquireTokenSilentAsync, which will return the cached
+            // access token if it has not expired. If it has expired, it will
+            // handle using the refresh token to get a new one.
+            var result = await confidentialClientApplication.AcquireTokenSilentAsync(scopes, confidentialClientApplication.Users.First());
+
+            accessToken = result.AccessToken;
+
+            return accessToken;
+        }
+
         private async Task OnAuthorizationCodeReceived(AuthorizationCodeReceivedNotification notification)
         {
             // Get the signed in user's id and create a token cache
             string signedInUserId = notification.AuthenticationTicket.Identity.FindFirst(ClaimTypes.NameIdentifier).Value;
-            SessionTokenCache tokenCache = new SessionTokenCache(signedInUserId,
+            SessionTokenCache tokenCache = new SessionTokenCache(
+                signedInUserId,
                 notification.OwinContext.Environment["System.Web.HttpContextBase"] as HttpContextBase);
 
-            ConfidentialClientApplication cca = new ConfidentialClientApplication(
-                AppId, RedirectUri, new ClientCredential(AppPassword), tokenCache.GetMsalCacheInstance(), null);
+            ConfidentialClientApplication confidentialClientApplication = 
+                    new ConfidentialClientApplication(
+                                                        AppId, 
+                                                        RedirectUri, 
+                                                        new ClientCredential(AppPassword), 
+                                                        tokenCache.GetMsalCacheInstance(), 
+                                                        null);
 
             try
             {
-                var result = await cca.AcquireTokenByAuthorizationCodeAsync(notification.Code, Scopes);
+                var userToken = await confidentialClientApplication.AcquireTokenByAuthorizationCodeAsync(notification.Code, Scopes);
+                //var appToken = GetAccessToken(tokenCache);
             }
             catch (MsalException ex)
             {

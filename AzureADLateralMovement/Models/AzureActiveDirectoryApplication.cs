@@ -8,6 +8,7 @@ using AzureActiveDirectoryApplication.Utils;
 using Humanizer;
 using MoreLinq;
 using Newtonsoft.Json.Linq;
+using NLog;
 
 namespace AzureActiveDirectoryApplication.Models
 {
@@ -15,6 +16,7 @@ namespace AzureActiveDirectoryApplication.Models
     {
         private readonly Dictionary<string, string> _deviceObjectIdToDeviceId = new Dictionary<string, string>();
         private readonly MicrosoftGraphApiHelper _microsoftGraphApiHelper;
+        private readonly NLog.Logger _logger = LogManager.GetCurrentClassLogger();
 
         public AzureActiveDirectoryApplication(HttpContextBase httpContext)
         {
@@ -60,7 +62,7 @@ namespace AzureActiveDirectoryApplication.Models
             }
             catch (Exception ex)
             {
-                throw new Exception($"ERROR {nameof(DirectoryRoles)} {ex.Message}");
+                _logger.Error(ex, $"{nameof(DirectoryRoles)} {ex.Message} {ex.InnerException}");
             }
         }
 
@@ -75,15 +77,12 @@ namespace AzureActiveDirectoryApplication.Models
                     var groupMembersList = await _microsoftGraphApiHelper.GetGroupMembers(_.Id);
                     var groupMembers = BloodHoundHelper.BuildGroupMembersList(groupMembersList);
                     BloodHoundHelper.GroupMembership(_, groupMembers);
-                    if (Startup.IsCosmosDbGraphEnabled)
-                    {
-                        CosmosDbGraphHelper.GroupMembership(_, groupMembers);
-                    }
+                    if (Startup.IsCosmosDbGraphEnabled) CosmosDbGraphHelper.GroupMembership(_, groupMembers);
                 });
             }
             catch (Exception ex)
             {
-                throw new Exception($"ERROR {nameof(Groups)} {ex.Message}");
+                _logger.Error(ex, $"{nameof(Groups)} {ex.Message} {ex.InnerException}");
             }
         }
 
@@ -94,22 +93,24 @@ namespace AzureActiveDirectoryApplication.Models
                 var directoryRoles = await _microsoftGraphApiHelper.GetDirectoryRoles();
                 var devices = await _microsoftGraphApiHelper.GetDevices();
 
-                await devices.ForEachAsync(async _ =>
-                {
-                    _deviceObjectIdToDeviceId.Add(_.DeviceId, _.Id);
-                    var ownerList = (await _microsoftGraphApiHelper.GetRegisteredOwners(_.Id))
-                        .Where(__ => __ != null).ToList();
-
-                    BloodHoundHelper.DeviceOwners(_, ownerList);
-                    if (Startup.IsCosmosDbGraphEnabled)
+                await devices.
+                    Where(_ => _.DisplayName != null).
+                    ForEachAsync(async _ =>
                     {
-                        CosmosDbGraphHelper.DeviceOwners(_, ownerList, directoryRoles);
-                    }
-                });
+                        _deviceObjectIdToDeviceId.Add(_.DeviceId, _.Id);
+                        var ownerList = (await _microsoftGraphApiHelper.GetRegisteredOwners(_.Id))
+                            .Where(__ => __ != null).ToList();
+
+                        BloodHoundHelper.DeviceOwners(_, ownerList);
+                        if (Startup.IsCosmosDbGraphEnabled)
+                        {
+                            CosmosDbGraphHelper.DeviceOwners(_, ownerList, directoryRoles);
+                        }
+                    });
             }
             catch (Exception ex)
             {
-                throw new Exception($"ERROR {nameof(DeviceOwners)} {ex.Message}");
+                _logger.Error(ex, $"{nameof(DeviceOwners)} {ex.Message} {ex.InnerException}");
             }
         }
 
@@ -122,9 +123,9 @@ namespace AzureActiveDirectoryApplication.Models
 
                 signIns
                     .Where(_ => _.ClientAppUsed?.Equals("Mobile Apps and Desktop clients",
-                        StringComparison.OrdinalIgnoreCase) == true)
+                                    StringComparison.OrdinalIgnoreCase) == true)
                     .Where(_ => _.ResourceDisplayName?.Equals("Windows Azure Active Directory",
-                        StringComparison.OrdinalIgnoreCase) == true)
+                                    StringComparison.OrdinalIgnoreCase) == true)
                     .Where(_ => _.CreatedDateTime.HasValue &&
                                 _.CreatedDateTime.Value.UtcDateTime.IsNotOlderThan(2.Days()))
                     .ForEach(_ =>
@@ -140,18 +141,20 @@ namespace AzureActiveDirectoryApplication.Models
 
                 interactiveLogOns.DistinctBy(_ => new {_.UserId, _.DeviceId});
 
-                interactiveLogOns.Where(_ => _.UserId != null).ForEach(_ =>
-                {
-                    BloodHoundHelper.InteractiveLogOns(_);
-                    if (Startup.IsCosmosDbGraphEnabled)
+                interactiveLogOns.
+                    Where(_ => _.UserId != null && 
+                               _.UserDisplayName != null && 
+                               _.DeviceDisplayName != null).
+                    ForEach(_ =>
                     {
-                        CosmosDbGraphHelper.InteractiveLogOns(_, _deviceObjectIdToDeviceId);
-                    }
-                });
+                        BloodHoundHelper.InteractiveLogOns(_);
+                        if (Startup.IsCosmosDbGraphEnabled)
+                            CosmosDbGraphHelper.InteractiveLogOns(_, _deviceObjectIdToDeviceId);
+                    });
             }
             catch (Exception ex)
             {
-                throw new Exception($"ERROR {nameof(InteractiveLogOns)} {ex.Message}");
+                _logger.Error(ex, $"{nameof(InteractiveLogOns)} {ex.Message} {ex.InnerException}");
             }
         }
 
@@ -160,18 +163,20 @@ namespace AzureActiveDirectoryApplication.Models
             try
             {
                 var users = await _microsoftGraphApiHelper.GetUsers();
-                users.ForEach(_ =>
-                {
-                    BloodHoundHelper.Users(_);
-                    if (Startup.IsCosmosDbGraphEnabled)
+                users
+                    .Where(_ => _.DisplayName != null)
+                    .ForEach(_ =>
                     {
-                        CosmosDbGraphHelper.Users(_);
-                    }
-                });
+                        BloodHoundHelper.Users(_);
+                        if (Startup.IsCosmosDbGraphEnabled)
+                        {
+                            CosmosDbGraphHelper.Users(_);
+                        }
+                    });
             }
             catch (Exception ex)
             {
-                throw new Exception($"ERROR {nameof(Users)} {ex.Message}");
+                _logger.Error(ex, $"{nameof(Users)} {ex.Message} {ex.InnerException}");
             }
         }
 
@@ -184,7 +189,7 @@ namespace AzureActiveDirectoryApplication.Models
             }
             catch (Exception ex)
             {
-                throw new Exception($"ERROR {nameof(Users)} {ex.Message}");
+                _logger.Error(ex, $"{nameof(Domains)} {ex.Message} {ex.InnerException}");
             }
         }
 
@@ -216,7 +221,7 @@ namespace AzureActiveDirectoryApplication.Models
                         __ => __.Union(permissionsSet).ToHashSet()
                     );
 
-                    BloodHoundHelper.Applications(appDisplayName ?? appId, permissionsSet, principalId);
+                    //BloodHoundHelper.Applications(appDisplayName ?? appId, permissionsSet, principalId);
                     if (Startup.IsCosmosDbGraphEnabled)
                     {
                         CosmosDbGraphHelper.Applications(appDisplayName, appId, permissionsSet, principalId);
@@ -239,7 +244,7 @@ namespace AzureActiveDirectoryApplication.Models
             }
             catch (Exception ex)
             {
-                throw new Exception($"ERROR {nameof(Users)} {ex.Message}");
+                _logger.Error(ex, $"{nameof(AppSignIns)} {ex.Message} {ex.InnerException}");
             }
         }
 

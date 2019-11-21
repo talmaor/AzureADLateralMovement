@@ -1,13 +1,12 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
-using System.Web;
 using AzureActiveDirectoryApplication.Models;
 using AzureActiveDirectoryApplication.Models.BloodHound;
 using Microsoft.Azure.CosmosDB.BulkExecutor.Graph.Element;
 using Microsoft.Graph;
 using MoreLinq.Extensions;
+using Application = AzureActiveDirectoryApplication.Models.BloodHound.Application;
 using DirectoryRole = Microsoft.Graph.DirectoryRole;
 using Group = Microsoft.Graph.Group;
 using User = Microsoft.Graph.User;
@@ -20,17 +19,21 @@ namespace AzureActiveDirectoryApplication.Utils
 
         static CosmosDbGraphHelper()
         {
-            AzureDictionaryRolesToPermissionsMapping = HttpContext.Current.Application
-                .GetApplicationState<Dictionary<string, List<string>>>(
-                    nameof(AzureDictionaryRolesToPermissionsMapping));
+            //AzureDictionaryRolesToPermissionsMapping = HttpContext.Current.Application
+            //    .GetApplicationState<Dictionary<string, List<string>>>(
+            //        nameof(AzureDictionaryRolesToPermissionsMapping));
         }
 
         private static void TryGetPermissions(DirectoryRole _, out List<string> permissions)
         {
-            if (_?.DisplayName == null)
+            if (_?.DisplayName == null || AzureDictionaryRolesToPermissionsMapping == null)
+            {
                 permissions = null;
+            }
             else
+            {
                 AzureDictionaryRolesToPermissionsMapping.TryGetValue(_.DisplayName, out permissions);
+            }
         }
 
         public static void GroupMembership(Group _,
@@ -121,51 +124,55 @@ namespace AzureActiveDirectoryApplication.Utils
             List<DirectoryObject> ownerList,
             IGraphServiceDirectoryRolesCollectionPage directoryRoles)
         {
-            var gremlinVertices = new List<GremlinVertex>();
-            var gremlinEdges = new List<GremlinEdge>();
-
-            var deviceOwnerGroups =
-                directoryRoles.Where(__ =>
-                    MicrosoftGraphApiHelper.DeviceOwnerGroupDisplayNames.Contains(__.DisplayName));
-
-            var vertex = new GremlinVertex(_.Id, nameof(Computer));
-            vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, _.Id.GetHashCode());
-            vertex.AddProperty(nameof(_.DisplayName), _.DisplayName?.ToUpper() ?? string.Empty);
-            gremlinVertices.Add(vertex);
-
-            ownerList.ForEach(__ =>
+            try
             {
-                var user = (User) __;
-                var gremlinEdge = new GremlinEdge(
-                    user.Id + _.Id,
-                    "AdminTo",
-                    user.Id,
-                    _.Id,
-                    nameof(User),
-                    nameof(Computer),
-                    user.Id.GetHashCode(),
-                    _.Id.GetHashCode());
+                var gremlinVertices = new List<GremlinVertex>();
+                var gremlinEdges = new List<GremlinEdge>();
+                var deviceOwnerGroups =
+                    directoryRoles.Where(__ =>
+                        MicrosoftGraphApiHelper.DeviceOwnerGroupDisplayNames.Contains(__.DisplayName));
+                var vertex = new GremlinVertex(_.Id, nameof(Computer));
 
-                gremlinEdges.Add(gremlinEdge);
-            });
+                vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, _.Id.GetHashCode());
+                vertex.AddProperty(nameof(_.DisplayName), _.DisplayName?.ToUpper() ?? string.Empty);
+                gremlinVertices.Add(vertex);
+                ownerList.ForEach(__ =>
+                {
+                    var user = (User) __;
+                    var gremlinEdge = new GremlinEdge(
+                        user.Id + _.Id,
+                        "AdminTo",
+                        user.Id,
+                        _.Id,
+                        nameof(User),
+                        nameof(Computer),
+                        user.Id.GetHashCode(),
+                        _.Id.GetHashCode());
 
-            deviceOwnerGroups.ForEach(directoryRole =>
+                    gremlinEdges.Add(gremlinEdge);
+                });
+                deviceOwnerGroups.ForEach(directoryRole =>
+                {
+                    var gremlinEdge = new GremlinEdge(
+                        directoryRole.Id + _.Id,
+                        "AdminTo",
+                        directoryRole.Id,
+                        _.Id,
+                        nameof(DirectoryRole),
+                        nameof(Computer),
+                        directoryRole.Id.GetHashCode(),
+                        _.Id.GetHashCode());
+
+                    gremlinEdges.Add(gremlinEdge);
+                });
+
+                CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
+                CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+            }
+            catch (ClientException ex)
             {
-                var gremlinEdge = new GremlinEdge(
-                    directoryRole.Id + _.Id,
-                    "AdminTo",
-                    directoryRole.Id,
-                    _.Id,
-                    nameof(DirectoryRole),
-                    nameof(Computer),
-                    directoryRole.Id.GetHashCode(),
-                    _.Id.GetHashCode());
-
-                gremlinEdges.Add(gremlinEdge);
-            });
-
-            CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
-            CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+                throw new Exception(ex.Message);
+            }
         }
 
         public static void InteractiveLogOns(InteractiveLogon _,
@@ -195,7 +202,6 @@ namespace AzureActiveDirectoryApplication.Utils
         public static void Users(User user)
         {
             var gremlinVertices = new List<GremlinVertex>();
-
             var userVertex = new GremlinVertex(user.Id, nameof(User));
             userVertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, user.Id.GetHashCode());
             userVertex.AddProperty(nameof(user.UserPrincipalName), user.UserPrincipalName ?? string.Empty);
@@ -212,53 +218,61 @@ namespace AzureActiveDirectoryApplication.Utils
             HashSet<string> permissionsSet,
             string principalId)
         {
-            var gremlinVertices = new List<GremlinVertex>();
-            var gremlinEdges = new List<GremlinEdge>();
-
-            var vertex = new GremlinVertex(appId, nameof(Application));
-            vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, appId.GetHashCode());
-            vertex.AddProperty(nameof(appDisplayName), appDisplayName?.ToUpper() ?? string.Empty);
-            vertex.AddProperty(nameof(permissionsSet), permissionsSet.ToDelimitedString(",") ?? string.Empty);
-            gremlinVertices.Add(vertex);
-
-            var outVertexId = principalId ?? "AccessToAllPrincipals";
-
-            var gremlinEdge = new GremlinEdge(
-                outVertexId + appId,
-                "Granted",
-                appId,
-                outVertexId,
-                nameof(Models.BloodHound.User),
-                nameof(Application),
-                appId.GetHashCode(),
-                outVertexId.GetHashCode());
-
-            gremlinEdge.AddProperty(nameof(permissionsSet), permissionsSet.ToDelimitedString(",") ?? string.Empty);
-            gremlinEdges.Add(gremlinEdge);
-
-            var mailPermissions = new List<string>
+            try
             {
-                "Mail.Read", "Mail.ReadBasic", "Mail.ReadWrite", "Mail.Read.Shared", "Mail.ReadWrite.Shared",
-                "Mail.Send", "Mail.Send.Shared", "MailboxSettings.Read", "Mail.Read", "Mail.ReadWrite",
-                "Mail.Send", "MailboxSettings.Read", "MailboxSettings.ReadWrite"
-            };
+                var gremlinVertices = new List<GremlinVertex>();
+                var gremlinEdges = new List<GremlinEdge>();
 
-            if (permissionsSet.Overlaps(mailPermissions))
-            {
-                gremlinEdge = new GremlinEdge(
-                    appId + "MailBoxes",
-                    "CanManipulate",
+                var vertex = new GremlinVertex(appId, nameof(Application));
+                vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, appId.GetHashCode());
+                vertex.AddProperty(nameof(appDisplayName), appDisplayName?.ToUpper() ?? string.Empty);
+                vertex.AddProperty(nameof(permissionsSet), permissionsSet.ToDelimitedString(",") ?? string.Empty);
+                gremlinVertices.Add(vertex);
+
+                var outVertexId = principalId ?? "AccessToAllPrincipals";
+
+                var gremlinEdge = new GremlinEdge(
+                    outVertexId + appId,
+                    "Granted",
                     appId,
-                    "MailBoxes",
-                    nameof(Application),
+                    outVertexId,
+                    nameof(Models.BloodHound.User),
                     nameof(Application),
                     appId.GetHashCode(),
-                    "MailBoxes".GetHashCode());
-                gremlinEdges.Add(gremlinEdge);
-            }
+                    outVertexId.GetHashCode());
 
-            CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
-            CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+                gremlinEdge.AddProperty(nameof(permissionsSet), permissionsSet.ToDelimitedString(",") ?? string.Empty);
+                gremlinEdges.Add(gremlinEdge);
+
+                var mailPermissions = new List<string>
+                {
+                    "Mail.Read", "Mail.ReadBasic", "Mail.ReadWrite", "Mail.Read.Shared", "Mail.ReadWrite.Shared",
+                    "Mail.Send", "Mail.Send.Shared", "MailboxSettings.Read", "Mail.Read", "Mail.ReadWrite",
+                    "Mail.Send", "MailboxSettings.Read", "MailboxSettings.ReadWrite"
+                };
+
+                if (permissionsSet.Overlaps(mailPermissions))
+                {
+                    gremlinEdge = new GremlinEdge(
+                        appId + "MailBoxes",
+                        "CanManipulate",
+                        appId,
+                        "MailBoxes",
+                        nameof(Application),
+                        nameof(Application),
+                        appId.GetHashCode(),
+                        "MailBoxes".GetHashCode());
+                    gremlinEdges.Add(gremlinEdge);
+                }
+
+                CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
+                CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
     }
 }

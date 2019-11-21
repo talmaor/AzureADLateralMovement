@@ -41,7 +41,7 @@ namespace AzureActiveDirectoryApplication.Utils
                 {
                     BoundedCapacity = 10.Thousands(),
                     CancellationToken = CancellationToken.None,
-                    MaxDegreeOfParallelism = 1
+                    MaxDegreeOfParallelism = 10
                 });
 
         public static readonly ActionBlock<IEnumerable<GremlinEdge>> RunImportEdgesBlock =
@@ -134,7 +134,7 @@ namespace AzureActiveDirectoryApplication.Utils
             BulkImportResponse vResponse = null;
 
             while (Client == null || _graphBulkExecutor == null || _initializeAsyncTask?.IsCompleted != true)
-                await Task.Delay(10.Milliseconds(), token);
+                await Task.Delay(100.Milliseconds(), token);
 
             try
             {

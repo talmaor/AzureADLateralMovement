@@ -100,7 +100,7 @@ namespace AzureActiveDirectoryApplication.Models
                                 users = users ?? CreateFileStream(nameof(users));
                                 SerializeAndFlush(users, user, ref userCount);
                                 break;
-                            case Application application:
+                            case BloodHound.Application application:
                                 applications = applications ?? CreateFileStream(nameof(applications));
                                 SerializeAndFlush(applications, application, ref applicationCount);
                                 break;

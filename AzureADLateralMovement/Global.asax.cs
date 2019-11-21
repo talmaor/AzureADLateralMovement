@@ -27,7 +27,7 @@ namespace AzureActiveDirectoryApplication
                     Server.MapPath("~/App_Data/AzurePermissions.json")));
 
             Application.Lock();
-            Application["azureDictionaryRolesToPermissionsMapping"] = azurePermissions;
+            Application["AzureDictionaryRolesToPermissionsMapping"] = azurePermissions;
             Application.UnLock();
         }
     }

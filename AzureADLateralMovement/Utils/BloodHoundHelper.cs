@@ -98,33 +98,41 @@ namespace AzureActiveDirectoryApplication.Utils
         public static void DeviceOwners(Device device,
             List<DirectoryObject> localMembers)
         {
-            if (_devicesOutput.IsCompleted)
+            try
             {
-                _devicesOutput = new BlockingCollection<JsonBase>();
-                _devicesWriter = Extensions.StartOutputWriter(_devicesOutput);
-            }
-
-            var deviceOwners = localMembers.Select(_ => _ as User)
-                .Where(_ => _ != null)
-                .Select(_ => new LocalMember
+                if (_devicesOutput.IsCompleted)
                 {
-                    Name = _.DisplayName.ToUpper(),
-                    Type = nameof(User)
-                })
-                .ToList();
+                    _devicesOutput = new BlockingCollection<JsonBase>();
+                    _devicesWriter = Extensions.StartOutputWriter(_devicesOutput);
+                }
 
-            /* the list should be filled also with the list in (once the api supports it):
-             Home -> tenant -> Devices -> Device settings -> Local administrators on devices*/
-            if (device.TrustType.Equals("AzureAd", StringComparison.CurrentCultureIgnoreCase))
-            {
-                deviceOwners.AddRange(DeviceGroupOwners);
+                var deviceOwners = localMembers.Select(_ => _ as User)
+                    .Where(_ => _ != null)
+                    .Select(_ => new LocalMember
+                    {
+                        Name = _.DisplayName.ToUpper(),
+                        Type = nameof(User)
+                    })
+                    .ToList();
+
+                /* the list should be filled also with the list in (once the api supports it):
+                 Home -> tenant -> Devices -> Device settings -> Local administrators on devices*/
+                if (device.TrustType.Equals("AzureAd", StringComparison.CurrentCultureIgnoreCase))
+                {
+                    deviceOwners.AddRange(DeviceGroupOwners);
+                }
+
+                _devicesOutput.Add(new Computer
+                {
+                    Name = device.DisplayName,
+                    LocalAdmins = deviceOwners.ToArray()
+                });
             }
-
-            _devicesOutput.Add(new Computer
+            catch (Exception ex)
             {
-                Name = device.DisplayName,
-                LocalAdmins = deviceOwners.ToArray()
-            });
+                throw new Exception($"ERROR {nameof(DeviceOwners)} {ex.Message}");
+            }
+            
         }
 
         public static void InteractiveLogOns(InteractiveLogon _)
@@ -184,7 +192,7 @@ namespace AzureActiveDirectoryApplication.Utils
                 _applicationsWriter = Extensions.StartOutputWriter(_applicationsOutput);
             }
 
-            _applicationsOutput.Add(new Application
+            _applicationsOutput.Add(new Models.BloodHound.Application
             {
                 Name = appId,
                 Permissions = permissionsSet.ToArray(),

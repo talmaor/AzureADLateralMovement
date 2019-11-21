@@ -1,12 +1,17 @@
-﻿@* Copyright (c) Microsoft. All rights reserved. Licensed under the MIT license. See LICENSE.txt in the project root for license information.*@
+﻿@using System.Security.Claims
+@* Copyright (c) Microsoft. All rights reserved. Licensed under the MIT license. See LICENSE.txt in the project root for license information.*@
 @{
     ViewBag.Title = "AzureAD";
 }
 
 <div class="jumbotron">
     <h1>Azure AD Lateral Movement</h1>
-    <p class="lead">This sample app uses Microsoft Graph API to read Azure AD entities.</p>
-    @if (Request.IsAuthenticated)
+    <p class="lead">This sample app uses Microsoft Graph API to read Azure AD entities, permissions and signin logs.</p>
+    <p class="lead">It analyzes the data and build a graph of connections that reveals lateral movement paths.</p>
+    <p class="lead">The data is kept in Graph DB in Azure, under strict GDPR policy, so it can be traversal to find paths and present it visually.</p>
+    
+    @if (Request.IsAuthenticated &&
+        ClaimsPrincipal.Current.FindFirst("aud").Value == Startup.AppId)
     {
         <p>Welcome, @(ViewBag.UserName)!</p>
     }

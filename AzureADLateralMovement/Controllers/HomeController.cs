@@ -47,6 +47,11 @@ namespace AzureActiveDirectoryApplication.Controllers
         {
             if (Request.IsAuthenticated)
             {
+                if (ClaimsPrincipal.Current.FindFirst("aud").Value != Startup.AppId)
+                {
+                    return View();
+                }
+
                 var userName = ClaimsPrincipal.Current.FindFirst("name").Value;
                 var userId = ClaimsPrincipal.Current.FindFirst(ClaimTypes.NameIdentifier).Value;
                 if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(userId)) return RedirectToAction("SignOut");
@@ -66,15 +71,19 @@ namespace AzureActiveDirectoryApplication.Controllers
 
         public void SignIn()
         {
-            if (!Request.IsAuthenticated)
+            if (!Request.IsAuthenticated || 
+                ClaimsPrincipal.Current.FindFirst("aud").Value != Startup.AppId)
+            {
                 HttpContext.GetOwinContext().Authentication.Challenge(
                     new AuthenticationProperties {RedirectUri = "/"},
                     OpenIdConnectAuthenticationDefaults.AuthenticationType);
+            }
         }
 
         public void SignOut()
         {
-            if (Request.IsAuthenticated)
+            if (Request.IsAuthenticated &&
+                ClaimsPrincipal.Current.FindFirst("aud").Value == Startup.AppId)
             {
                 var userId = ClaimsPrincipal.Current.FindFirst(ClaimTypes.NameIdentifier).Value;
 

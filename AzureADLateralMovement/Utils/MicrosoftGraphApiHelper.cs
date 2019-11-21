@@ -13,12 +13,16 @@ using Microsoft.Ajax.Utilities;
 using Microsoft.Graph;
 using Microsoft.Identity.Client;
 using Newtonsoft.Json.Linq;
+using NLog;
 using ConfigurationManager = System.Configuration.ConfigurationManager;
 
 namespace AzureActiveDirectoryApplication.Utils
 {
     public class MicrosoftGraphApiHelper
     {
+        private static readonly NLog.Logger Logger = LogManager.GetCurrentClassLogger();
+
+
         public static readonly List<string> DeviceOwnerGroupDisplayNames = new List<string>
             {"Company Administrator", "Cloud Device Administrator"};
 
@@ -29,7 +33,6 @@ namespace AzureActiveDirectoryApplication.Utils
         {
             _httpContext = httpContext;
             _graphServiceClient = GetGraphClient().Result;
-            
         }
 
         public async Task<GraphServiceClient> GetGraphClient()
@@ -67,13 +70,17 @@ namespace AzureActiveDirectoryApplication.Utils
                 // Get the user's token cache
                 var tokenCache = new SessionTokenCache(userId, httpContextBase);
 
-                var cca = new ConfidentialClientApplication(
-                    appId, redirectUri, new ClientCredential(appPassword), tokenCache.GetMsalCacheInstance(), null);
+                var confidentialClientApplication = new ConfidentialClientApplication(
+                    appId, 
+                    redirectUri, 
+                    new ClientCredential(appPassword), 
+                    tokenCache.GetMsalCacheInstance(), 
+                    null);
 
                 // Call AcquireTokenSilentAsync, which will return the cached
                 // access token if it has not expired. If it has expired, it will
                 // handle using the refresh token to get a new one.
-                var result = await cca.AcquireTokenSilentAsync(scopes, cca.Users.First());
+                var result = await confidentialClientApplication.AcquireTokenSilentAsync(scopes, confidentialClientApplication.Users.First());
 
                 accessToken = result.AccessToken;
             }
@@ -156,11 +163,21 @@ namespace AzureActiveDirectoryApplication.Utils
 
         private async Task<JToken> GetGraphDataPrivate(string graphUrl)
         {
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, graphUrl);
-            await _graphServiceClient.AuthenticationProvider.AuthenticateRequestAsync(httpRequestMessage);
-            var response = await _graphServiceClient.HttpProvider.SendAsync(httpRequestMessage);
-            var content = await response.Content.ReadAsStringAsync();
-            var trendingResponseBody = JObject.Parse(content).GetValue("value");
+            JToken trendingResponseBody = null;
+            try
+            {
+                var httpRequestMessage = new HttpRequestMessage(HttpMethod.Get, graphUrl);
+                await _graphServiceClient.AuthenticationProvider.AuthenticateRequestAsync(httpRequestMessage);
+                var response = await _graphServiceClient.HttpProvider.SendAsync(httpRequestMessage);
+                var content = await response.Content.ReadAsStringAsync();
+                trendingResponseBody = JObject.Parse(content).GetValue("value");
+                
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, $"{nameof(GetGraphDataPrivate)} {ex.Message} {ex.InnerException}");
+            }
+
             return trendingResponseBody;
         }
     }
