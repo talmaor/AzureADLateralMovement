@@ -24,7 +24,7 @@ namespace AzureActiveDirectoryApplication.Utils
 {
     internal abstract class CosmosDbHelper : Module
     {
-        private static readonly string DatabaseName = "TenantIdApp";
+        private static string DatabaseName = "TenantIdApp";
         private static readonly string CollectionName = "Entities";
         private static readonly int CollectionThroughput = 1000;
         private static Task _initializeAsyncTask;
@@ -69,8 +69,10 @@ namespace AzureActiveDirectoryApplication.Utils
 
         public static string CollectionPartitionKey { get; } = "pk";
 
-        public static async Task InitializeCosmosDb()
+        public static async Task InitializeCosmosDb(string tenantId)
         {
+            DatabaseName = tenantId;
+
             if (!_initialized)
             {
                 _initialized = true;

@@ -41,8 +41,14 @@ namespace AzureActiveDirectoryApplication.Models
         {
             Ensure.That(Startup.OutputFolderLocation, nameof(Startup.OutputFolderLocation)).IsNotNullOrWhiteSpace();
             Ensure.That(fileName, nameof(fileName)).IsNotNullOrWhiteSpace();
+            
+            if (!System.IO.Directory.Exists(Startup.OutputFolderLocation))
+            {
+                return null;
+            }
 
             System.IO.Directory.CreateDirectory(Startup.OutputFolderLocation);
+
             var streamWriter = new StreamWriter(Startup.OutputFolderLocation + fileName, false, Encoding.UTF8);
             var jsonTextWriter = new JsonTextWriter(streamWriter) {Formatting = Formatting.Indented};
 
@@ -108,6 +114,11 @@ namespace AzureActiveDirectoryApplication.Models
 
                     void SerializeAndFlush(JsonTextWriter jsonTextWriter, JsonBase jsonBase, ref int counter)
                     {
+                        if (jsonTextWriter == null)
+                        {
+                            return;
+                        }
+
                         serializer.Serialize(jsonTextWriter, jsonBase);
                         counter++;
                         if (counter % 100 == 0) jsonTextWriter.Flush();

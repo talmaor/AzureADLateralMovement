@@ -23,20 +23,29 @@ namespace AzureActiveDirectoryApplication.Models
             _microsoftGraphApiHelper = new MicrosoftGraphApiHelper(httpContext);
         }
 
-        public async Task RunAzureActiveDirectoryApplication()
+        public async Task<List<string>> RunAzureActiveDirectoryApplication()
         {
-            await DeviceOwners();
-            await DirectoryRoles();
-            await Domains();
-            await Groups();
-            await Users();
-            await InteractiveLogOns();
+            var deviceOwners = await DeviceOwners();
+            var directoryRoles = await DirectoryRoles();
+            var domains = await Domains();
+            var groups = await Groups();
+            var users = await Users();
+            var interactiveLogons = await InteractiveLogOns();
             await AppSignIns();
-
             await BloodHoundHelper.Waiter();
+
+            return new List<string>
+            {
+                $"{nameof(DeviceOwners)} | {deviceOwners.Count} ",
+                $"{nameof(DirectoryRoles)} | {directoryRoles.ToDelimitedString(", ")}",
+                $"{nameof(Domains)} | {domains.ToDelimitedString(", ")}",
+                $"{nameof(Groups)} | {groups.ToDelimitedString(", ")}",
+                $"{nameof(Users)} | {users.ToDelimitedString(", ")}",
+                $"{nameof(InteractiveLogOns)}   | {interactiveLogons.Count()}"
+            };
         }
 
-        public async Task DirectoryRoles()
+        public async Task<HashSet<string>> DirectoryRoles()
         {
             try
             {
@@ -45,6 +54,7 @@ namespace AzureActiveDirectoryApplication.Models
                 var userIds = users.Select(_ => _.Id).ToList();
 
                 var administrators = new HashSet<string>();
+                var directoryRoles = new HashSet<string>();
 
                 await directoryRoleResults.ForEachAsync(async _ =>
                 {
@@ -58,40 +68,50 @@ namespace AzureActiveDirectoryApplication.Models
                         GetDeviceAdministratorsIds(_.DisplayName, members, administrators);
                         CosmosDbGraphHelper.DirectoryRolePermissions(_, userIds, administrators);
                     }
+
+                    directoryRoles.Add(_.DisplayName);
                 });
+
+                return directoryRoles;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"{nameof(DirectoryRoles)} {ex.Message} {ex.InnerException}");
+                return null;
             }
         }
 
-        public async Task Groups()
+        public async Task<HashSet<string>> Groups()
         {
             try
             {
                 var groupsCollectionPage = await _microsoftGraphApiHelper.GetGroups();
-
+                var groups = new HashSet<string>();
                 await groupsCollectionPage.ForEachAsync(async _ =>
                 {
                     var groupMembersList = await _microsoftGraphApiHelper.GetGroupMembers(_.Id);
                     var groupMembers = BloodHoundHelper.BuildGroupMembersList(groupMembersList);
                     BloodHoundHelper.GroupMembership(_, groupMembers);
                     if (Startup.IsCosmosDbGraphEnabled) CosmosDbGraphHelper.GroupMembership(_, groupMembers);
+                    groups.Add(_.DisplayName);
                 });
+
+                return groups;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"{nameof(Groups)} {ex.Message} {ex.InnerException}");
+                return null;
             }
         }
 
-        public async Task DeviceOwners()
+        public async Task<HashSet<Microsoft.Graph.DirectoryObject>> DeviceOwners()
         {
             try
             {
                 var directoryRoles = await _microsoftGraphApiHelper.GetDirectoryRoles();
                 var devices = await _microsoftGraphApiHelper.GetDevices();
+                HashSet<Microsoft.Graph.DirectoryObject> ownersList = new HashSet<Microsoft.Graph.DirectoryObject>();
 
                 await devices.
                     Where(_ => _.DisplayName != null).
@@ -106,15 +126,20 @@ namespace AzureActiveDirectoryApplication.Models
                         {
                             CosmosDbGraphHelper.DeviceOwners(_, ownerList, directoryRoles);
                         }
+
+                        ownersList.UnionWith(ownerList);
                     });
+
+                return ownersList;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"{nameof(DeviceOwners)} {ex.Message} {ex.InnerException}");
+                return null;
             }
         }
 
-        public async Task InteractiveLogOns()
+        public async Task<List<InteractiveLogon>> InteractiveLogOns()
         {
             try
             {
@@ -151,18 +176,23 @@ namespace AzureActiveDirectoryApplication.Models
                         if (Startup.IsCosmosDbGraphEnabled)
                             CosmosDbGraphHelper.InteractiveLogOns(_, _deviceObjectIdToDeviceId);
                     });
+
+                return interactiveLogOns;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"{nameof(InteractiveLogOns)} {ex.Message} {ex.InnerException}");
+                return null;
             }
         }
 
-        public async Task Users()
+        public async Task<HashSet<string>> Users()
         {
             try
             {
                 var users = await _microsoftGraphApiHelper.GetUsers();
+                var usersDisplayNames = new HashSet<string>();
+
                 users
                     .Where(_ => _.DisplayName != null)
                     .ForEach(_ =>
@@ -172,24 +202,35 @@ namespace AzureActiveDirectoryApplication.Models
                         {
                             CosmosDbGraphHelper.Users(_);
                         }
+                        usersDisplayNames.Add(_.DisplayName);
                     });
+
+                return usersDisplayNames;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"{nameof(Users)} {ex.Message} {ex.InnerException}");
+                return null;
             }
         }
 
-        public async Task Domains()
+        public async Task<HashSet<string>> Domains()
         {
             try
             {
                 var domainResults = await _microsoftGraphApiHelper.GetDomains();
-                domainResults.ForEach(domain => BloodHoundHelper.Domains(domain));
+                var domains = new HashSet<string>();
+                domainResults.ForEach(_ => {
+                        domains.Add(_.Id);
+                        BloodHoundHelper.Domains(_);
+                    });
+
+                return domains;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"{nameof(Domains)} {ex.Message} {ex.InnerException}");
+                return null;
             }
         }
 

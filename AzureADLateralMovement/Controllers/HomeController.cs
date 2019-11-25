@@ -9,6 +9,7 @@ using AzureActiveDirectoryApplication.TokenStorage;
 using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.Cookies;
 using Microsoft.Owin.Security.OpenIdConnect;
+using AzureActiveDirectoryApplication.Utils;
 
 #region BloodHountUsing
 
@@ -25,18 +26,11 @@ namespace AzureActiveDirectoryApplication.Controllers
         public async Task<ActionResult> AzureActiveDirectoryLateralMovement()
         {
             var azureActiveDirectoryApplication = new Models.AzureActiveDirectoryApplication(HttpContext);
-            await azureActiveDirectoryApplication.RunAzureActiveDirectoryApplication();
+            var tenantID = ClaimsPrincipal.Current.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid").Value;
+            await CosmosDbHelper.InitializeCosmosDb(tenantID);
+            var outputView = await azureActiveDirectoryApplication.RunAzureActiveDirectoryApplication();
 
-            return View(new List<string>
-            {
-                Startup.OutputFolderLocation + nameof(azureActiveDirectoryApplication.DeviceOwners),
-                Startup.OutputFolderLocation + nameof(azureActiveDirectoryApplication.DirectoryRoles),
-                Startup.OutputFolderLocation + nameof(azureActiveDirectoryApplication.Domains),
-                Startup.OutputFolderLocation + nameof(azureActiveDirectoryApplication.Groups),
-                Startup.OutputFolderLocation + nameof(azureActiveDirectoryApplication.Users),
-                Startup.OutputFolderLocation + nameof(azureActiveDirectoryApplication.InteractiveLogOns),
-                Startup.OutputFolderLocation + nameof(azureActiveDirectoryApplication.AppSignIns)
-            });
+            return View(outputView);
         }
 
         #endregion
@@ -64,6 +58,19 @@ namespace AzureActiveDirectoryApplication.Controllers
                 if (!tokenCache.HasData()) return RedirectToAction("SignOut");
 
                 ViewBag.UserName = userName;
+            }
+
+            return View();
+        }
+
+        public ActionResult RedirectToGraph()
+        {
+            if (Request.IsAuthenticated &&
+                ClaimsPrincipal.Current.FindFirst("aud").Value == Startup.AppId)
+            {
+                var tenantId = ClaimsPrincipal.Current.FindFirst("http://schemas.microsoft.com/identity/claims/tenantid").Value;
+
+                return Redirect($"http://azureadlateralmovementgraphexplorer.azurewebsites.net?tenantId={tenantId}");
             }
 
             return View();
