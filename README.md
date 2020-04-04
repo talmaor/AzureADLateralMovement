@@ -6,9 +6,9 @@ Using the Microsoft Graph API AzureADLateralMovement extracts interesting inform
 lateral movement graph data competable with Bloodhound 2.2.0
 
 Some of the  implemented features are :
-* Extraction of Users, Computers, Groups and Roles.
-* Creation of BloodHound objects
-* Inject the object to CosmosDb Graph
+* Extraction of Users, Computers, Groups, Roles and more.
+* Transform the entities to Graph objects
+* Inject the object to Azure CosmosDB Graph
 
 ![](/images/LMP.png)
 Explanation: Terry Jeffords is a member of Device Administrators.
@@ -43,17 +43,27 @@ In case you prefer using the Azure CosmosDb service instead of the BloodHound cl
 
 An example configuration as below :
 ```
-<appSettings>
-  <add key="ida:AppID" value= "<Azure app id>" />
-  <add key="ida:AppPassword" value="<Azure app secret>" />
-  <add key="ida:RedirectUri" value="http://localhost:44302" />
-  <add key="ida:AppScopes"
-       value="User.Read Mail.Read MailboxSettings.ReadWrite User.Read.All Directory.Read.All AuditLog.Read.All" />
-  <add key="ida:OutputFolderLocation" value="C:\AzureAdLateralMovement\" />
-  <add key="ida:IsCosmosDbGraphEnabled" value="false" />
-  <add key="ida:EndpointUrl" value="https://<CosmosDbEndPoint>.documents.azure.com:443/" />
-  <add key="ida:AuthorizationKey" value="<CosmosDbEndPoint AuthorizationKey>" />
-</appSettings>
+{
+  "AzureAd": {
+    "CallbackPath": "/signin-oidc",
+    "BaseUrl": "https://localhost:44334",
+    "Scopes": "Directory.Read.All AuditLog.Read.All",
+    "ClientId": "<ClientId>",
+    "ClientSecret": "<ClientSecret>",
+    "GraphResourceId": "https://graph.microsoft.com/",
+    "GraphScopes": "Directory.Read.All AuditLog.Read.All"
+  },
+  "Logging": {
+    "IncludeScopes": false,
+    "LogLevel": {
+      "Default": "Warning"
+    }
+  },
+  "CosmosDb": {
+    "EndpointUrl": "https://<CosmosDbGraphName>.documents.azure.com:443/",
+    "AuthorizationKey": "<AuthorizationKey>"
+  } 
+}
 ```
 
 ### Deployment
