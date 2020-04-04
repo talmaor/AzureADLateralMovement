@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using AzureActiveDirectoryApplication.Models;
 using AzureActiveDirectoryApplication.Models.BloodHound;
+using AzureAdLateralMovement.Models.BloodHound;
+using AzureAdLateralMovement.Utils;
 using Microsoft.Azure.CosmosDB.BulkExecutor.Graph.Element;
 using Microsoft.Graph;
 using MoreLinq.Extensions;
-using Application = AzureActiveDirectoryApplication.Models.BloodHound.Application;
+using Application = Microsoft.Graph.Application;
 using DirectoryRole = Microsoft.Graph.DirectoryRole;
+using Domain = AzureActiveDirectoryApplication.Models.BloodHound.Domain;
 using Group = Microsoft.Graph.Group;
 using User = Microsoft.Graph.User;
 
@@ -17,112 +20,124 @@ namespace AzureActiveDirectoryApplication.Utils
     {
         private static readonly Dictionary<string, List<string>> AzureDictionaryRolesToPermissionsMapping;
 
-        static CosmosDbGraphHelper()
-        {
-            //AzureDictionaryRolesToPermissionsMapping = HttpContext.Current.Application
-            //    .GetApplicationState<Dictionary<string, List<string>>>(
-            //        nameof(AzureDictionaryRolesToPermissionsMapping));
-        }
-
         private static void TryGetPermissions(DirectoryRole _, out List<string> permissions)
         {
             if (_?.DisplayName == null || AzureDictionaryRolesToPermissionsMapping == null)
-            {
                 permissions = null;
-            }
             else
-            {
                 AzureDictionaryRolesToPermissionsMapping.TryGetValue(_.DisplayName, out permissions);
-            }
         }
 
-        public static void GroupMembership(Group _,
-            List<GroupMember> groupMembers)
+        public static void GroupMembership<T>(Group _,  List<T> groupMembers) where T : GroupMember
         {
-            var gremlinVertices = new List<GremlinVertex>();
-            var gremlinEdges = new List<GremlinEdge>();
-
-            var vertex = new GremlinVertex(_.Id, nameof(Models.BloodHound.Group));
-            vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, _.Id.GetHashCode());
-            vertex.AddProperty(nameof(_.DisplayName), _.DisplayName?.ToUpper() ?? string.Empty);
-            gremlinVertices.Add(vertex);
-
-            groupMembers.ForEach(member =>
+            try
             {
-                var gremlinEdge = new GremlinEdge(
-                    _.Id + member.Id,
-                    "MemberOf",
-                    member.Id,
-                    _.Id,
-                    member.MemberType,
-                    nameof(Models.BloodHound.Group),
-                    member.Id.GetHashCode(),
-                    _.Id.GetHashCode());
+                var gremlinVertices = new List<GremlinVertex>();
+                var gremlinEdges = new List<GremlinEdge>();
 
-                gremlinEdges.Add(gremlinEdge);
-            });
+                var vertex = new GremlinVertex(_.Id, nameof(AzureAdLateralMovement.Models.BloodHound.Group));
+                vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, _.Id.GetHashCode());
+                vertex.AddProperty(nameof(_.DisplayName), _.DisplayName?.ToUpper() ?? string.Empty);
+                gremlinVertices.Add(vertex);
 
-            CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
-            CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+                groupMembers.ForEach(member =>
+                {
+                    var gremlinEdge = new GremlinEdge(
+                        _.Id + member.Id,
+                        member is  GroupOwner ? "Owner" : "MemberOf",
+                        member.Id,
+                        _.Id,
+                        member.Type,
+                        nameof(AzureAdLateralMovement.Models.BloodHound.Group),
+                        member.Id.GetHashCode(),
+                        _.Id.GetHashCode());
+
+                    gremlinEdges.Add(gremlinEdge);
+                });
+
+                CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
+                CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         public static void DirectoryRoleMembership(DirectoryRole _,
             List<GroupMember> members)
         {
-            var gremlinVertices = new List<GremlinVertex>();
-            var gremlinEdges = new List<GremlinEdge>();
-
-            var vertex = new GremlinVertex(_.Id, nameof(Models.BloodHound.DirectoryRole));
-            vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, _.Id.GetHashCode());
-            vertex.AddProperty(nameof(_.DisplayName), _.DisplayName?.ToUpper() ?? string.Empty);
-
-            gremlinVertices.Add(vertex);
-
-            members.ForEach(member =>
+            try
             {
-                gremlinEdges.Add(new GremlinEdge(
-                    _.Id + member.Id,
-                    "MemberOf",
-                    member.Id,
-                    _.Id,
-                    nameof(User),
-                    nameof(Models.BloodHound.DirectoryRole),
-                    member.Id.GetHashCode(),
-                    _.Id.GetHashCode()));
-            });
+                var gremlinVertices = new List<GremlinVertex>();
+                var gremlinEdges = new List<GremlinEdge>();
 
-            CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
-            CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+                var vertex = new GremlinVertex(_.Id, nameof(DirectoryRole));
+                vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, _.Id.GetHashCode());
+                vertex.AddProperty(nameof(_.DisplayName), _.DisplayName?.ToUpper() ?? string.Empty);
+
+                gremlinVertices.Add(vertex);
+
+                members.ForEach(member =>
+                {
+                    gremlinEdges.Add(new GremlinEdge(
+                        _.Id + member.Id,
+                        "MemberOf",
+                        member.Id,
+                        _.Id,
+                        nameof(User),
+                        nameof(DirectoryRole),
+                        member.Id.GetHashCode(),
+                        _.Id.GetHashCode()));
+                });
+
+                CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
+                CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         public static void DirectoryRolePermissions(DirectoryRole _,
             List<string> userIds,
             HashSet<string> administrators)
         {
-            var gremlinEdges = new List<GremlinEdge>();
-            TryGetPermissions(_, out var permissions);
+            try
+            {
+                var gremlinEdges = new List<GremlinEdge>();
+                TryGetPermissions(_, out var permissions);
 
-            if (permissions?.Contains("microsoft.aad.directory/users/password/update") == true)
-                userIds.Where(userId => !administrators.Contains(userId)).ForEach(
-                    userId =>
-                        gremlinEdges.Add(
-                            new GremlinEdge(
-                                _.Id + userId,
-                                "ForceChangePassword",
-                                _.Id,
-                                userId,
-                                nameof(Models.BloodHound.DirectoryRole),
-                                nameof(User),
-                                _.Id.GetHashCode(),
-                                userId.GetHashCode()
-                            )));
+                if (permissions?.Contains("microsoft.aad.directory/users/password/update") == true)
+                    userIds.Where(userId => !administrators.Contains(userId)).ForEach(
+                        userId =>
+                            gremlinEdges.Add(
+                                new GremlinEdge(
+                                    _.Id + userId,
+                                    "ForceChangePassword",
+                                    _.Id,
+                                    userId,
+                                    nameof(AzureAdLateralMovement.Models.BloodHound.DirectoryRole),
+                                    nameof(User),
+                                    _.Id.GetHashCode(),
+                                    userId.GetHashCode()
+                                )));
 
-            CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+                CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         public static void DeviceOwners(Device _,
             List<DirectoryObject> ownerList,
-            IGraphServiceDirectoryRolesCollectionPage directoryRoles)
+            List<DirectoryRole> directoryRoles)
         {
             try
             {
@@ -130,7 +145,7 @@ namespace AzureActiveDirectoryApplication.Utils
                 var gremlinEdges = new List<GremlinEdge>();
                 var deviceOwnerGroups =
                     directoryRoles.Where(__ =>
-                        MicrosoftGraphApiHelper.DeviceOwnerGroupDisplayNames.Contains(__.DisplayName));
+                        AzureActiveDirectoryHelper.DeviceOwnerGroupDisplayNames.Contains(__.DisplayName));
                 var vertex = new GremlinVertex(_.Id, nameof(Computer));
 
                 vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, _.Id.GetHashCode());
@@ -178,95 +193,170 @@ namespace AzureActiveDirectoryApplication.Utils
         public static void InteractiveLogOns(InteractiveLogon _,
             Dictionary<string, string> deviceObjectIdToDeviceId)
         {
-            var gremlinEdges = new List<GremlinEdge>();
+            try
+            {
+                var gremlinEdges = new List<GremlinEdge>();
+                deviceObjectIdToDeviceId.TryGetValue(_.DeviceId, out var deviceId);
+                if (deviceId == null) return;
 
-            deviceObjectIdToDeviceId.TryGetValue(_.DeviceId, out var deviceId);
+                var gremlinEdge = new GremlinEdge(
+                    deviceId + _.UserId,
+                    "HasSession",
+                    deviceId,
+                    _.UserId,
+                    nameof(Computer),
+                    nameof(User),
+                    deviceId.GetHashCode(),
+                    _.UserId.GetHashCode());
 
-            if (deviceId == null) return;
+                gremlinEdges.Add(gremlinEdge);
 
-            var gremlinEdge = new GremlinEdge(
-                deviceId + _.UserId,
-                "HasSession",
-                deviceId,
-                _.UserId,
-                nameof(Computer),
-                nameof(User),
-                deviceId.GetHashCode(),
-                _.UserId.GetHashCode());
-
-            gremlinEdges.Add(gremlinEdge);
-
-            CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+                CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         public static void Users(User user)
         {
-            var gremlinVertices = new List<GremlinVertex>();
-            var userVertex = new GremlinVertex(user.Id, nameof(User));
-            userVertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, user.Id.GetHashCode());
-            userVertex.AddProperty(nameof(user.UserPrincipalName), user.UserPrincipalName ?? string.Empty);
-            userVertex.AddProperty(nameof(user.Mail), user.Mail ?? string.Empty);
-            userVertex.AddProperty(nameof(user.DisplayName), user.DisplayName?.ToUpper() ?? string.Empty);
-            gremlinVertices.Add(userVertex);
+            try
+            {
+                var gremlinVertices = new List<GremlinVertex>();
+                var userVertex = new GremlinVertex(user.Id, nameof(User));
+                userVertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, user.Id.GetHashCode());
+                userVertex.AddProperty(nameof(user.UserPrincipalName), user.UserPrincipalName ?? string.Empty);
+                userVertex.AddProperty(nameof(user.Mail), user.Mail ?? string.Empty);
+                userVertex.AddProperty(nameof(user.DisplayName), user.DisplayName?.ToUpper() ?? string.Empty);
+                gremlinVertices.Add(userVertex);
 
-            CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
+                CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
-        public static void Applications(
-            string appDisplayName,
-            string appId,
-            HashSet<string> permissionsSet,
-            string principalId)
+        public static void AppOwnership(Application app,
+            List<DirectoryObject> owners, string applicationAdministratorRoleId = "534a2975-e5b9-4ea1-b7da-deaec0a7c0aa")
         {
             try
             {
                 var gremlinVertices = new List<GremlinVertex>();
                 var gremlinEdges = new List<GremlinEdge>();
 
-                var vertex = new GremlinVertex(appId, nameof(Application));
-                vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, appId.GetHashCode());
-                vertex.AddProperty(nameof(appDisplayName), appDisplayName?.ToUpper() ?? string.Empty);
-                vertex.AddProperty(nameof(permissionsSet), permissionsSet.ToDelimitedString(",") ?? string.Empty);
+                var vertex = new GremlinVertex(app.AppId, nameof(Models.BloodHound.Application));
+                vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, app.AppId.GetHashCode());
+                vertex.AddProperty(nameof(app.DisplayName), app.DisplayName?.ToUpper() ?? string.Empty);
                 gremlinVertices.Add(vertex);
 
-                var outVertexId = principalId ?? "AccessToAllPrincipals";
-
-                var gremlinEdge = new GremlinEdge(
-                    outVertexId + appId,
-                    "Granted",
-                    appId,
-                    outVertexId,
-                    nameof(Models.BloodHound.User),
-                    nameof(Application),
-                    appId.GetHashCode(),
-                    outVertexId.GetHashCode());
-
-                gremlinEdge.AddProperty(nameof(permissionsSet), permissionsSet.ToDelimitedString(",") ?? string.Empty);
-                gremlinEdges.Add(gremlinEdge);
-
-                var mailPermissions = new List<string>
+                owners.ForEach(owner =>
                 {
-                    "Mail.Read", "Mail.ReadBasic", "Mail.ReadWrite", "Mail.Read.Shared", "Mail.ReadWrite.Shared",
-                    "Mail.Send", "Mail.Send.Shared", "MailboxSettings.Read", "Mail.Read", "Mail.ReadWrite",
-                    "Mail.Send", "MailboxSettings.Read", "MailboxSettings.ReadWrite"
-                };
+                    var gremlinEdge = new GremlinEdge(
+                        owner.Id + app.AppId,
+                        "Owner",
+                        owner.Id,
+                        app.AppId,
+                        nameof(User),
+                        nameof(Models.BloodHound.Application),
+                        owner.Id.GetHashCode(),
+                        app.AppId.GetHashCode());
 
-                if (permissionsSet.Overlaps(mailPermissions))
-                {
-                    gremlinEdge = new GremlinEdge(
-                        appId + "MailBoxes",
-                        "CanManipulate",
-                        appId,
-                        "MailBoxes",
-                        nameof(Application),
-                        nameof(Application),
-                        appId.GetHashCode(),
-                        "MailBoxes".GetHashCode());
                     gremlinEdges.Add(gremlinEdge);
-                }
+                });
+
+                var gremlinEdge2 = new GremlinEdge(
+                    applicationAdministratorRoleId + app.AppId,
+                    "Owner",
+                    applicationAdministratorRoleId,
+                    app.AppId,
+                    nameof(DirectoryRole),
+                    nameof(Models.BloodHound.Application),
+                    applicationAdministratorRoleId.GetHashCode(),
+                    app.AppId.GetHashCode()
+                );
+
+                gremlinEdges.Add(gremlinEdge2);
 
                 CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
                 CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+        }
+
+        public static void Applications(
+            string appDisplayName,
+            string appId,
+            HashSet<string> permissionsSet,
+            HashSet<string> userIdSet,
+            string principalId,
+            string homePage,
+            string appOwnerOrganizationId)
+        {
+            try
+            {
+                var gremlinVertices = new List<GremlinVertex>();
+                var gremlinEdges = new List<GremlinEdge>();
+
+                var vertex = new GremlinVertex(appId, nameof(Models.BloodHound.Application));
+                vertex.AddProperty(CosmosDbHelper.CollectionPartitionKey, appId.GetHashCode());
+                vertex.AddProperty(nameof(Application.DisplayName), appDisplayName?.ToUpper() ?? string.Empty);
+                vertex.AddProperty(nameof(permissionsSet), permissionsSet.ToDelimitedString(",") ?? string.Empty);
+                vertex.AddProperty(nameof(principalId), principalId ?? string.Empty);
+                vertex.AddProperty(nameof(homePage), homePage ?? string.Empty);
+                vertex.AddProperty(nameof(appOwnerOrganizationId), appOwnerOrganizationId ?? string.Empty);
+                gremlinVertices.Add(vertex);
+
+                if (appOwnerOrganizationId != null)
+                {
+                    var vertexDomain = new GremlinVertex(appOwnerOrganizationId, nameof(Models.BloodHound.Domain));
+                    vertexDomain.AddProperty(CosmosDbHelper.CollectionPartitionKey, appOwnerOrganizationId.GetHashCode());
+                    vertexDomain.AddProperty(nameof(Application.DisplayName), appOwnerOrganizationId.ToUpper());
+                    gremlinVertices.Add(vertexDomain);
+
+                    gremlinEdges.Add(
+                        new GremlinEdge(
+                            appOwnerOrganizationId + appId,
+                            "Owner",
+                            appOwnerOrganizationId,
+                            appId,
+                            nameof(Models.BloodHound.Domain),
+                            nameof(Application),
+                            appOwnerOrganizationId.GetHashCode(),
+                            appId.GetHashCode()
+                        ));
+                }
+                
+
+                if (permissionsSet.Any(_ =>
+                    string.Equals(_, "Directory.AccessAsUser.All", StringComparison.OrdinalIgnoreCase)))
+                    
+                    userIdSet.ForEach(userId =>
+                        gremlinEdges.Add(
+                            new GremlinEdge(
+                                appId + userId,
+                                "AccessAsUser",
+                                appId,
+                                userId,
+                                nameof(Models.BloodHound.Application),
+                                nameof(User),
+                                appId.GetHashCode(),
+                                userId.GetHashCode()
+                            ))
+                    );
+
+
+                CosmosDbHelper.RunImportVerticesBlock.Post(gremlinVertices);
+                CosmosDbHelper.RunImportEdgesBlock.Post(gremlinEdges);
+
             }
             catch (Exception e)
             {

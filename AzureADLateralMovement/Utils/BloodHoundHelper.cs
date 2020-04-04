@@ -5,10 +5,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using AzureActiveDirectoryApplication.Models;
 using AzureActiveDirectoryApplication.Models.BloodHound;
+using AzureAdLateralMovement.Models.BloodHound;
 using Microsoft.Graph;
 using DirectoryRole = Microsoft.Graph.DirectoryRole;
 using Domain = Microsoft.Graph.Domain;
-using Group = AzureActiveDirectoryApplication.Models.BloodHound.Group;
+using Group = AzureAdLateralMovement.Models.BloodHound.Group;
 using User = Microsoft.Graph.User;
 
 namespace AzureActiveDirectoryApplication.Utils
@@ -54,7 +55,7 @@ namespace AzureActiveDirectoryApplication.Utils
         }
 
         private static readonly List<LocalMember> DeviceGroupOwners =
-            MicrosoftGraphApiHelper.DeviceOwnerGroupDisplayNames.Select(_ => new LocalMember
+            AzureActiveDirectoryHelper.DeviceOwnerGroupDisplayNames.Select(_ => new LocalMember
             {
                 Name = _.ToUpper(),
                 Type = nameof(Group)
@@ -87,7 +88,7 @@ namespace AzureActiveDirectoryApplication.Utils
             }
 
             var properties = new Dictionary<string, object> {{nameof(_.RoleTemplateId), _.RoleTemplateId}};
-            _groupsOutput.Add(new Models.BloodHound.DirectoryRole
+            _groupsOutput.Add(new AzureAdLateralMovement.Models.BloodHound.DirectoryRole
             {
                 Name = _.DisplayName,
                 Members = groupMembers.ToArray(),
@@ -210,27 +211,53 @@ namespace AzureActiveDirectoryApplication.Utils
                     groupMembers.Add(new GroupMember
                     {
                         Id = user.Id,
-                        MemberName = user.DisplayName,
-                        MemberType = nameof(Models.BloodHound.User)
+                        Name = user.DisplayName,
+                        Type = nameof(Models.BloodHound.User)
                     });
                 else if (__ is Microsoft.Graph.Group group)
                     groupMembers.Add(new GroupMember
                     {
                         Id = group.Id,
-                        MemberName = group.DisplayName,
-                        MemberType = nameof(Group)
+                        Name = group.DisplayName,
+                        Type = nameof(Group)
                     });
                 else if (__ is Device device)
                     groupMembers.Add(new GroupMember
                     {
                         Id = device.Id,
-                        MemberName = device.DisplayName,
-                        MemberType = nameof(Computer)
+                        Name = device.DisplayName,
+                        Type = nameof(Computer)
                     });
                 else
                     throw new NotImplementedException();
 
             return groupMembers;
+        }
+
+        public static List<GroupOwner> BuildGroupOwnership(
+            IGroupOwnersCollectionWithReferencesPage groupMembersList)
+        {
+            var groupOwners = new List<GroupOwner>();
+
+            foreach (var __ in groupMembersList)
+                if (__ is User user)
+                    groupOwners.Add(new GroupOwner
+                    {
+                        Id = user.Id,
+                        Name = user.DisplayName,
+                        Type = nameof(Models.BloodHound.User)
+                    });
+                else if (__ is Microsoft.Graph.Group group)
+                    groupOwners.Add(new GroupOwner
+                    {
+                        Id = group.Id,
+                        Name = group.DisplayName,
+                        Type = nameof(Group)
+                    });
+                else
+                    throw new NotImplementedException();
+
+            return groupOwners;
         }
 
         public static async Task Waiter()

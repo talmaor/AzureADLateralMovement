@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
-namespace AzureActiveDirectoryApplication.Utils
+namespace AzureAdLateralMovement.Utils
 {
     public static class EnumerableExtensions
     {
@@ -17,10 +17,7 @@ namespace AzureActiveDirectoryApplication.Utils
                 MaxDegreeOfParallelism = maxDegreesOfParallelism
             });
 
-            foreach (var item in items)
-            {
-                actionBlock.Post(item);
-            }
+            foreach (var item in items) actionBlock.Post(item);
 
             actionBlock.Complete();
 
@@ -28,12 +25,11 @@ namespace AzureActiveDirectoryApplication.Utils
         }
 
         public static void CreateOrUpdate<TKey, TValue>(
-            this Dictionary<TKey, TValue> dictionary, 
+            this Dictionary<TKey, TValue> dictionary,
             TKey id,
-            Func<TValue> addValueFactory, 
+            Func<TValue> addValueFactory,
             Func<TValue, TValue> updateValueFactory)
         {
-
             dictionary[id] = dictionary.ContainsKey(id) ? updateValueFactory(dictionary[id]) : addValueFactory();
         }
     }

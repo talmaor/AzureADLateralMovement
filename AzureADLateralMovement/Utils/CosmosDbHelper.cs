@@ -5,7 +5,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Configuration;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
@@ -19,12 +18,13 @@ using Microsoft.Azure.CosmosDB.BulkExecutor.Graph;
 using Microsoft.Azure.CosmosDB.BulkExecutor.Graph.Element;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
+using AzureAdLateralMovement;
 
-namespace AzureActiveDirectoryApplication.Utils
+namespace AzureAdLateralMovement.Utils
 {
-    internal abstract class CosmosDbHelper : Module
+    public abstract class CosmosDbHelper : Module
     {
-        private static string DatabaseName = "TenantIdApp";
+        private static string _databaseName = "TenantIdApp";
         private static readonly string CollectionName = "Entities";
         private static readonly int CollectionThroughput = 1000;
         private static Task _initializeAsyncTask;
@@ -62,8 +62,8 @@ namespace AzureActiveDirectoryApplication.Utils
 
         static CosmosDbHelper()
         {
-            var endpointUrl = ConfigurationManager.AppSettings["ida:EndpointUrl"];
-            var authorizationKey = ConfigurationManager.AppSettings["ida:AuthorizationKey"];
+            var endpointUrl = Startup.CosmosDbOptions.EndpointUrl;
+            var authorizationKey = Startup.CosmosDbOptions.AuthorizationKey;
             Client = new DocumentClient(new Uri(endpointUrl), authorizationKey, ConnectionPolicy);
         }
 
@@ -71,7 +71,7 @@ namespace AzureActiveDirectoryApplication.Utils
 
         public static async Task InitializeCosmosDb(string tenantId)
         {
-            DatabaseName = tenantId;
+            _databaseName = tenantId;
 
             if (!_initialized)
             {
@@ -104,21 +104,21 @@ namespace AzureActiveDirectoryApplication.Utils
             {
                 if (_shouldCleanupOnStart)
                 {
-                    var database = GetDatabaseIfExists(Client, DatabaseName);
+                    var database = GetDatabaseIfExists(Client, _databaseName);
                     if (database != null) await Client.DeleteDatabaseAsync(database.SelfLink);
 
-                    Trace.TraceInformation("Creating database {0}", DatabaseName);
-                    database = await Client.CreateDatabaseAsync(new Database {Id = DatabaseName});
+                    Trace.TraceInformation("Creating database {0}", _databaseName);
+                    database = await Client.CreateDatabaseAsync(new Database {Id = _databaseName});
 
                     Trace.TraceInformation("Creating collection {0} with {1} RU/s", CollectionName,
                         CollectionThroughput);
-                    _dataCollection = await CreatePartitionedCollectionAsync(Client, DatabaseName, CollectionName,
+                    _dataCollection = await CreatePartitionedCollectionAsync(Client, _databaseName, CollectionName,
                         CollectionThroughput, CollectionPartitionKey);
                     _shouldCleanupOnStart = false;
                 }
                 else
                 {
-                    _dataCollection = GetCollectionIfExists(Client, DatabaseName, CollectionName);
+                    _dataCollection = GetCollectionIfExists(Client, _databaseName, CollectionName);
                     if (_dataCollection == null) throw new Exception("The data collection does not exist");
                 }
             }
@@ -229,6 +229,13 @@ namespace AzureActiveDirectoryApplication.Utils
             }
 
             return collection;
+        }
+
+        public class CosmosDbOptions
+        {
+            public string EndpointUrl { get; set; }
+
+            public string AuthorizationKey { get; set; }
         }
     }
 }

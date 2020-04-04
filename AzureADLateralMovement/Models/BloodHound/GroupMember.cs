@@ -1,18 +1,19 @@
 ﻿using System;
+using AzureActiveDirectoryApplication.Models;
 
-namespace AzureActiveDirectoryApplication.Models.BloodHound
+namespace AzureAdLateralMovement.Models.BloodHound
 {
     public class GroupMember : IEquatable<GroupMember>
     {
         private string _userName;
-        public string MemberName
+        public string Name
         {
             get => _userName;
             set => _userName = value.ToUpper();
         }
 
         private string _type;
-        public string MemberType
+        public string Type
         {
             get => _type;
             set => _type = value.ToTitleCase();
@@ -24,7 +25,7 @@ namespace AzureActiveDirectoryApplication.Models.BloodHound
         {
             if (ReferenceEquals(null, other)) return false;
             if (ReferenceEquals(this, other)) return true;
-            return string.Equals(MemberName, other.MemberName) && string.Equals(MemberType, other.MemberType);
+            return string.Equals(Name, other.Name) && string.Equals(Type, other.Type);
         }
 
         public override bool Equals(object obj)
@@ -39,8 +40,8 @@ namespace AzureActiveDirectoryApplication.Models.BloodHound
         {
             unchecked
             {
-                return ((MemberName != null ? MemberName.GetHashCode() : 0) * 397) ^
-                       (MemberType != null ? MemberType.GetHashCode() : 0);
+                return ((Name != null ? Name.GetHashCode() : 0) * 397) ^
+                       (Type != null ? Type.GetHashCode() : 0);
             }
         }
     }

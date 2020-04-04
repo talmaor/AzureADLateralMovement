@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.28307.572
+VisualStudioVersion = 15.0.27004.2005
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AzureADLateralMovement", "AzureADLateralMovement\AzureADLateralMovement.csproj", "{5F0EF413-E5C0-4ADF-A912-996B0168756F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AzureAdLateralMovement", "AzureAdLateralMovement\AzureAdLateralMovement.csproj", "{6BF3A9F0-48B7-4CCB-BE5B-9962AE453DD2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,15 +11,15 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{5F0EF413-E5C0-4ADF-A912-996B0168756F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5F0EF413-E5C0-4ADF-A912-996B0168756F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5F0EF413-E5C0-4ADF-A912-996B0168756F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5F0EF413-E5C0-4ADF-A912-996B0168756F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6BF3A9F0-48B7-4CCB-BE5B-9962AE453DD2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6BF3A9F0-48B7-4CCB-BE5B-9962AE453DD2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6BF3A9F0-48B7-4CCB-BE5B-9962AE453DD2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6BF3A9F0-48B7-4CCB-BE5B-9962AE453DD2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {CBBC809E-79D7-4724-975E-B4DFE45EB698}
+		SolutionGuid = {7C99A97D-FC2E-4D17-AD3B-46460F0EF371}
 	EndGlobalSection
 EndGlobal

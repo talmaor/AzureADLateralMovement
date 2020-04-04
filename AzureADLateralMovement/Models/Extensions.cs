@@ -5,12 +5,14 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using AzureActiveDirectoryApplication.Models.BloodHound;
+using AzureAdLateralMovement.Models.BloodHound;
 using EnsureThat;
 using Microsoft.Graph;
+using AzureAdLateralMovement;
 using Newtonsoft.Json;
-using DirectoryRole = AzureActiveDirectoryApplication.Models.BloodHound.DirectoryRole;
+using DirectoryRole = AzureAdLateralMovement.Models.BloodHound.DirectoryRole;
 using Domain = AzureActiveDirectoryApplication.Models.BloodHound.Domain;
-using Group = AzureActiveDirectoryApplication.Models.BloodHound.Group;
+using Group = AzureAdLateralMovement.Models.BloodHound.Group;
 using User = AzureActiveDirectoryApplication.Models.BloodHound.User;
 
 namespace AzureActiveDirectoryApplication.Models
@@ -148,8 +150,8 @@ namespace AzureActiveDirectoryApplication.Models
             return roleMembers.Cast<Microsoft.Graph.User>().Select(__ => new GroupMember
             {
                 Id = __.Id,
-                MemberName = __.DisplayName,
-                MemberType = nameof(Microsoft.Graph.User)
+                Name = __.DisplayName,
+                Type = nameof(Microsoft.Graph.User)
             }).ToList();
         }
     }

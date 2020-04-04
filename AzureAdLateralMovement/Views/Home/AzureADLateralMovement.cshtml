@@ -1,0 +1,27 @@
+﻿@* Copyright (c) Microsoft. All rights reserved. Licensed under the MIT license. See LICENSE.txt in the project root for license information.*@
+@model  List<string>
+
+@{
+    ViewBag.Title = "Azure AD Lateral Movement";
+}
+
+<h2>Azure AD Lateral Movement</h2>
+
+<table class="table">
+    <tr>
+        <th>
+            Collected the following Azure AD objects
+        </th>
+    </tr>
+    
+    @foreach (var item in Model)
+    {
+        <tr>
+            <td>
+                @Html.DisplayFor(modelItem => item)
+            </td>
+        </tr>
+    }
+</table>
+
+<p><a href="@Url.Action("RedirectToGraph", "Home", null)" class="btn btn-primary btn-lg">Click here to view data as graph</a></p>
