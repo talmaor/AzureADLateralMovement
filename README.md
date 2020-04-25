@@ -3,7 +3,7 @@
 
 AzureADLateralMovement allows to build Lateral Movement graph for Azure Active Directory entities - Users, Computers, Groups and Roles.
 Using the Microsoft Graph API AzureADLateralMovement extracts interesting information and builds json files containing 
-lateral movement graph data competable with Bloodhound 2.2.0
+lateral movement graph data compatible with Bloodhound 2.2.0
 
 Some of the  implemented features are :
 * Extraction of Users, Computers, Groups, Roles and more.
@@ -20,11 +20,11 @@ This attack path can be exploited manually or by automated tools.
 
 ### The toolkit consists of several components
 ### MicrosoftGraphApi Helper
-The MicrosoftGraphApi Helper is responsible for retriving the required data from Graph API
+The MicrosoftGraphApi Helper is responsible for retrieving the required data from Graph API
 ### BloodHound Helper
 Responsible for creating json files that can dropped on BloodHound 2.2.0 to extend the organization covered entities
 ### CosmosDbGraph Helper
-In case you prefer using the Azure CosmosDb service instead of the BloodHound client, this module will push the data retrived into a graph database service
+In case you prefer using the Azure CosmosDb service instead of the BloodHound client, this module will push the data retrieved into a graph database service
 
 
 ## How to set up
@@ -128,6 +128,3 @@ Exploring graph queries on top of Azure Cosmos DB with Gremlin https://github.co
 SharpHound - The C# Ingestor https://github.com/BloodHoundAD/BloodHound/wiki/Data-Collector
 Quickstart: Build a .NET Framework or Core application using the Azure Cosmos DB Gremlin API account https://docs.microsoft.com/en-us/azure/cosmos-db/create-graph-dotnet
 How to: Use the portal to create an Azure AD application and service principal that can access resources https://docs.microsoft.com/en-us/azure/active-directory/develop/howto-create-service-principal-portal
-
-
-
